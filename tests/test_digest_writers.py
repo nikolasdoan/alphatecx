@@ -238,3 +238,44 @@ class TestDashboardPushAnnouncesItsOwnFailure:
         """Weekends and holidays produce no diff and must not warn."""
         step = self._step()
         assert "no static-asset changes to commit" in step
+
+
+class TestDashboardPushUsesTheDeployKey:
+    """The nightly static-asset push to `main` only works because checkout uses
+    a write-enabled DEPLOY KEY, which is a bypassable actor on the `main`
+    ruleset. `GITHUB_TOKEN` is not — no bypass actor covers github-actions[bot]
+    — which is why the push was rejected (GH013) from 2026-08-16 and the
+    console served frozen pages for three weeks.
+
+    Dropping `ssh-key:` would restore that silently: the job still runs, the
+    step is continue-on-error, and only the warning would fire.
+    """
+
+    def _workflow(self) -> str:
+        return (ROOT / ".github" / "workflows" / "daily_harvest.yml").read_text()
+
+    def test_checkout_requests_the_deploy_key(self):
+        wf = self._workflow()
+        assert "ssh-key: ${{ secrets.DASHBOARD_DEPLOY_KEY }}" in wf, (
+            "checkout must use the deploy key or the push to main is rejected"
+        )
+
+    def test_the_key_is_on_the_checkout_that_precedes_the_push(self):
+        """Order matters: the credential is configured by checkout, so it has
+        to be the checkout at the top of this job, not a later one."""
+        wf = self._workflow()
+        assert wf.index("ssh-key:") < wf.index("git push origin main")
+
+    def test_credentials_are_persisted_for_the_later_push_step(self):
+        """checkout can be told to discard credentials after cloning; with that
+        set, the push step several minutes later would have none."""
+        wf = self._workflow()
+        assert "persist-credentials: true" in wf
+
+    def test_the_stale_dashboard_warning_survives_the_fix(self):
+        """Getting it working once is not the same as noticing when it stops.
+        The annotation stays as the tripwire for a rotated key or a rewritten
+        ruleset."""
+        wf = self._workflow()
+        assert "::warning title=Dashboard frozen" in wf
+        assert "DASHBOARD_DEPLOY_KEY" in wf.split("::warning title=Dashboard frozen")[1][:400]

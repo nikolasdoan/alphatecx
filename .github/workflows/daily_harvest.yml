@@ -50,6 +50,24 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # SSH via a write-enabled DEPLOY KEY, not the default GITHUB_TOKEN.
+          #
+          # The `main` ruleset requires a pull request and a passing `test`
+          # check, and there is NO bypass actor that covers github-actions[bot]
+          # pushing with GITHUB_TOKEN — so from 2026-08-16 the nightly
+          # `chore(graph): daily refresh` push was rejected (GH013) and the
+          # console served frozen pages for three weeks. A deploy key IS a
+          # bypassable actor (ruleset → Bypass list → Others → Deploy keys),
+          # and it is the narrowest one available: write to this repository
+          # only, no user identity, cannot open pull requests, cannot reach
+          # anything else in the org.
+          #
+          # checkout falls back to GITHUB_TOKEN when this secret is empty, so a
+          # fork or an unconfigured clone degrades to the old behaviour — the
+          # push fails and the warning below fires, rather than the job dying.
+          ssh-key: ${{ secrets.DASHBOARD_DEPLOY_KEY }}
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -173,15 +191,16 @@ jobs:
         # continue-on-error, so a push problem must ANNOUNCE ITSELF or it is
         # invisible: a failing step inside a green run is exactly the shape of
         # bug this pipeline keeps producing. Branch protection (enabled
-        # 2026-08-16, when the repo went public) rejects this push outright —
+        # 2026-08-16, when the repo went public) rejected this push outright —
         # "Changes must be made through a pull request" — so the dashboards
         # silently stopped regenerating and nothing said so for three weeks;
         # the runs were red for an unrelated reason, which hid it further.
         #
-        # The real fix is a repository-settings one: allow the Actions actor to
-        # bypass the ruleset for this [skip ci] data commit. Until that is in
-        # place the warning annotation is the deliverable, and it names the
-        # cause rather than leaving a raw git rejection in the log.
+        # RESOLVED 2026-09-05 by the deploy key on the checkout step above,
+        # added to the ruleset's bypass list. The warning below is KEPT, not
+        # removed: it is what will say so if the key is rotated away, the
+        # bypass entry is dropped, or the ruleset is rewritten. Getting this
+        # working once is not the same as noticing when it stops.
         if: success()
         continue-on-error: true
         run: |
@@ -205,7 +224,7 @@ jobs:
           echo "$push_log"
           case "$push_log" in
             *GH013*|*"protected branch"*|*"repository rule violations"*)
-              echo "::warning title=Dashboard frozen::Branch protection rejected the daily static-asset push to main, so the console dashboards are now STALE. Allow the Actions actor to bypass the ruleset for this [skip ci] commit, or the pages stop updating while this run stays green." ;;
+              echo "::warning title=Dashboard frozen::Branch protection rejected the daily static-asset push to main, so the console dashboards are now STALE. The DASHBOARD_DEPLOY_KEY bypass has stopped working — check the secret still holds the private key and that the ruleset's bypass list still contains Deploy keys." ;;
             *)
               echo "::warning title=Dashboard push failed::Could not push the refreshed dashboards; the console will serve stale pages until this succeeds." ;;
           esac
