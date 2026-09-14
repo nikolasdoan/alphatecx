@@ -50,9 +50,25 @@ answers confidently.
 
 ### Why nothing may reach this Postgres
 
-marketecx centralizes into **Cloudflare D1** as a read model. That is the right call on its
-own merits (D1's limits are not the constraint: 10 GB per database against tens of MB of
-registry and hundreds of MB of daily series), but the decisive reason is ours:
+marketecx centralizes into **Cloudflare D1** as a read model, and the decisive reason is ours:
+
+> **Corrected 2026-09-14.** This paragraph first read "D1's limits are not the constraint:
+> 10 GB per database against tens of MB of registry and hundreds of MB of daily series."
+> That reasoned from the *storage* limits and missed the one that binds — on the free plan
+> **D1 caps rows written at 100,000 a day**, so bizmap's 513,807-row census takes six days to
+> load. bizmap has since added **Neon as a secondary store** (`a4b47bfe`) precisely because
+> the two free tiers meter opposite things: D1 caps writes, Neon caps storage (0.5 GB) and
+> does not cap writes. The shape there is now `data/derived/*.json` as the source of truth
+> with both databases as read models rebuilt from it — D1 the hot path, Neon holding the
+> secondary and spatial indexes and `pg_trgm`.
+>
+> **What this changes for alphatecx: nothing, and that is worth stating.** The extract this
+> repo pushes is ~2,000 rows of pre-computed views, nowhere near either ceiling, and bizmap
+> keeps its own Neon project rather than sharing one — a 175 MB registry and a market-data
+> warehouse in a single 0.5 GB budget means whichever fills it first breaks the other's
+> writes. The direction of travel is unchanged: the mapping is small, so it moves.
+
+
 
 **this Postgres has TLS disabled outright** — `sslmode=require` is rejected — which is why
 [the Zeabur migration decision](../decisions/2026-07-31-migrate-neon-to-zeabur.md) tolerates

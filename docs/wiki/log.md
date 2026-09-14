@@ -1263,3 +1263,10 @@ attributed_to: [niko, claude-agent]   belongs_to: [marketecx, system-architectur
 - Parse by header name, never by index: bizmap's devlog records an early script reading one column over and reporting a citywide SME count of zero. It failed loudly that time; the same mistake with a plausible result is invisible, and this file has 30-plus columns and is republished daily.
 - Lands as `dim_ticker.tax_id`, nullable with a unique index — ETFs, TDRs and anything auto-discovered by a T86 fetch will never have one, so NOT NULL would make the harvester's normal case an error.
 - updated [topics/marketecx.md](topics/marketecx.md). No code changed.
+
+## [2026-09-14] lint | Corrected the D1-limits claim in topics/marketecx.md
+attributed_to: [claude-agent]   belongs_to: [marketecx, system-architecture]
+- The page said "D1's limits are not the constraint: 10 GB per database…". That reasoned from **storage** and missed the limit that binds: on the free plan D1 caps rows **written** at 100,000/day, so bizmap's 513,807-row census takes six days to load. Mine to correct — I looked up the roomy number and stopped.
+- bizmap has since added **Neon as a secondary store** (`a4b47bfe`) because the two free tiers meter opposite things — D1 caps writes, Neon caps storage (0.5 GB) and does not cap writes. Its shape is now `data/derived/*.json` as the source of truth with both databases as read models rebuilt from it: D1 the hot path (tiny, replicated, metered), Neon holding the secondary indexes, a spatial index and `pg_trgm`.
+- **Nothing changes for this repo**, and the page now says so explicitly rather than leaving it inferred: the extract pushed from here is ~2,000 rows of pre-computed views, nowhere near either ceiling, and bizmap keeps its own Neon project rather than sharing one — a 175 MB registry and a market-data warehouse in a single 0.5 GB budget means whichever fills it first breaks the other's writes.
+- updated [topics/marketecx.md](topics/marketecx.md). No code changed.
