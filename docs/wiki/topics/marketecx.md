@@ -178,13 +178,36 @@ no application, no key. That is exactly the bar bizmap set.
 `match == "exact"` as it asked, without the column's meaning changing if a fuzzy source is ever
 added; and it makes a future degradation visible rather than silent.
 
-### What was not confirmed on 09-14 — both confirmed 09-15
+### Settled 2026-09-14 — it was built, and both open items resolved
+
+[niko] ran the harvester (`python -m src.harvester.tax_ids`) on a machine that can reach
+TWSE, and delivered the table to bizmap as `pipeline/listed_companies.csv`
+([tecxmate/bizmap#34](https://github.com/tecxmate/bizmap/pull/34)). **2,340 rows**, and both
+caveats below are answered:
+
+- **興櫃 exists after all.** There is a third file, `t187ap03_R`, and it carries 363 rows.
+  The split is 上市 1,086 · 上櫃 891 · 興櫃 363, so `市場別` carries all three of its values
+  and nothing is absent.
+- **The column list was right.** `match` is `exact` on all 2,340 rows — the join came from
+  the 統一編號 column, not from name matching, exactly as specified.
+
+Validated against the delivered file rather than its commit message: 2,340 rows, 7 fields on
+every row, every `tax_id` eight digits, **zero duplicate `tax_id` and zero duplicate
+`ticker_id`**, and `source` splitting 1,086 / 891 / 363 across the three TWSE files.
+
+Two details worth keeping. Three registered names legitimately contain commas —
+`TPK Holding Co., Ltd.`, `AES Holding Co., Ltd.`, `91APP, Inc.` — and are correctly quoted,
+so a consumer that splits on `,` corrupts three rows while a real CSV parser does not.
+bizmap reads every CSV through `csv.reader` / `csv.DictReader`, so it is safe there; it is
+the kind of thing that breaks a downstream script written in a hurry. And of the 2,340,
+**2,220 are present in bizmap's registry** — the 120 absent are 119 foreign-registered
+issuers plus one domestic ticker, which is the expected shape rather than a matching failure.
+
+### What was NOT confirmed when this was written
 
 - **興櫃.** 上市 and 上櫃 are confirmed above. Whether an equivalent open dataset exists for 興櫃
   is unverified — if it does not, `市場別` carries two of its three values and 興櫃 issuers are
   simply absent. Worth one check before the facet promises three.
-  **Confirmed:** `t187ap03_R.csv`, dataset 28568 (興櫃公司基本資料), same publisher, same licence,
-  daily — 363 companies. `市場別` carries all three values.
 - **The column itself, by direct observation.** `mopsfin.twse.com.tw` and `data.gov.tw` are both
   refused by this environment's egress proxy (403 on CONNECT), so the field list above comes
   from two independent secondary sources, not from opening the file. **The harvester must verify
@@ -192,8 +215,6 @@ added; and it makes a future degradation visible rather than silent.
   run and fail loudly if not. That is the same discipline `apply_delta.py` already applies to
   grants — read it back, fail if it did not land — and the right shape for a daily-republished
   government file whose schema nobody promised to keep.
-  **Confirmed** from [niko]'s machine, which has no such proxy: all three files carry the
-  33-column header exactly as listed. The harvester asserts it anyway.
 
 ### Where it lands here
 
@@ -250,9 +271,9 @@ Three things the spec could not have known:
 ### Verification
 
 - **Against 財政部's registry**, using the copy bizmap already had on disk (snapshot 14-SEP-26,
-  no download): 2,220 of 2,340 present, 2,178 under an identical name. The 120 absent are 119
-  foreign-registered issuers plus 3718 中光電投資控股. **676 are registered in 臺北市 and 417 in
-  新北市** — the 1,093 bizmap's census can actually join.
+  no download): beyond the 2,220 / 120 split in *Settled* above, 2,178 are present under an
+  identical name, the one domestic absentee is 3718 中光電投資控股, and **676 are registered in
+  臺北市 and 417 in 新北市** — the 1,093 bizmap's census can actually join.
 - **The SQL, against a throwaway local Postgres 17**, since the suite has no DB: 027 applies
   twice cleanly; `--load` assigns 統編 to listed tickers, leaves ETF, TDR and retired rows NULL
   and writes `ingestion_log`; a re-run touches 0 rows; a ticker change moves the 統編 by
