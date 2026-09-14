@@ -174,7 +174,32 @@ no application, no key. That is exactly the bar bizmap set.
 `match == "exact"` as it asked, without the column's meaning changing if a fuzzy source is ever
 added; and it makes a future degradation visible rather than silent.
 
-### What is NOT confirmed
+### Settled 2026-09-14 — it was built, and both open items resolved
+
+[niko] ran the harvester (`python -m src.harvester.tax_ids`) on a machine that can reach
+TWSE, and delivered the table to bizmap as `pipeline/listed_companies.csv`
+([tecxmate/bizmap#34](https://github.com/tecxmate/bizmap/pull/34)). **2,340 rows**, and both
+caveats below are answered:
+
+- **興櫃 exists after all.** There is a third file, `t187ap03_R`, and it carries 363 rows.
+  The split is 上市 1,086 · 上櫃 891 · 興櫃 363, so `市場別` carries all three of its values
+  and nothing is absent.
+- **The column list was right.** `match` is `exact` on all 2,340 rows — the join came from
+  the 統一編號 column, not from name matching, exactly as specified.
+
+Validated against the delivered file rather than its commit message: 2,340 rows, 7 fields on
+every row, every `tax_id` eight digits, **zero duplicate `tax_id` and zero duplicate
+`ticker_id`**, and `source` splitting 1,086 / 891 / 363 across the three TWSE files.
+
+Two details worth keeping. Three registered names legitimately contain commas —
+`TPK Holding Co., Ltd.`, `AES Holding Co., Ltd.`, `91APP, Inc.` — and are correctly quoted,
+so a consumer that splits on `,` corrupts three rows while a real CSV parser does not.
+bizmap reads every CSV through `csv.reader` / `csv.DictReader`, so it is safe there; it is
+the kind of thing that breaks a downstream script written in a hurry. And of the 2,340,
+**2,220 are present in bizmap's registry** — the 120 absent are 119 foreign-registered
+issuers plus one domestic ticker, which is the expected shape rather than a matching failure.
+
+### What was NOT confirmed when this was written
 
 - **興櫃.** 上市 and 上櫃 are confirmed above. Whether an equivalent open dataset exists for 興櫃
   is unverified — if it does not, `市場別` carries two of its three values and 興櫃 issuers are
