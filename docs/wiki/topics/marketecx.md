@@ -105,3 +105,74 @@ Recorded here because these are the things that will be got wrong if they are re
 - 2026-09-14 — proposed by [niko]; all three codebases read and the design written up in
   bizmap. The 統編 gap on `dim_ticker` identified as the cheapest and highest-value change in
   the plan. Nothing implemented here.
+
+---
+
+## The 統編 bridge table — spec, 2026-09-14
+
+bizmap stated what it needs, so this is now a specification rather than an intention:
+**one table, ~2,000 rows, `統一編號 → ticker → 市場別 → company name`, CSV or JSON.** Only the
+統一編號 join key is essential; the rest is display. Two conditions came with it — a per-row
+confidence flag if the mapping is name-matched, and clean government provenance, because
+bizmap's whole claim is that it is built from open data under 政府資料開放授權條款 and a vendor
+feed would muddy that.
+
+**Both conditions are satisfiable, and the first one largely dissolves.**
+
+### The source carries 統一編號 directly — no name matching
+
+TWSE publishes company basic data as open data, and **營利事業統一編號 sits in the same row as
+公司代號**. There is no matching step to be confident about:
+
+| | 上市 | 上櫃 |
+|---|---|---|
+| data.gov.tw dataset | [18419](https://data.gov.tw/dataset/18419) | [25036](https://data.gov.tw/dataset/25036) |
+| CSV | `https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv` | `https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv` |
+
+Published columns, in order: 出表日期, 公司代號, 公司名稱, 公司簡稱, 外國企業註冊地國, 產業別,
+住址, **營利事業統一編號**, 董事長, 總經理, … The file carries far more than is wanted; take four
+columns and drop the rest.
+
+**Parse by header name, never by index.** bizmap's own devlog records the cost of the other
+habit — an early script read capital and organisation type one column over, tested the invoice
+flag as the organisation type, and reported a citywide SME count of **zero**. It failed loudly
+that time. The same mistake with a plausible result is invisible, and this file has 30-plus
+columns and is republished daily.
+
+### Provenance
+
+Publisher 金融監督管理委員會證券期貨局 via TWSE, distributed on 政府資料開放平臺 under
+**政府資料開放授權條款第1版** — the same licence as every source already on bizmap's pages, so the
+attribution block gains a line and nothing about the licensing position changes. No vendor feed,
+no application, no key. That is exactly the bar bizmap set.
+
+### Shape
+
+```json
+{"tax_id": "22099131", "ticker_id": "2330", "market": "上市",
+ "name": "台灣積體電路製造股份有限公司", "match": "exact", "source": "twse:t187ap03_L",
+ "as_of": "2026-09-14"}
+```
+
+`match` is kept even though every row is `exact`, for two reasons: it lets bizmap publish on
+`match == "exact"` as it asked, without the column's meaning changing if a fuzzy source is ever
+added; and it makes a future degradation visible rather than silent.
+
+### What is NOT confirmed
+
+- **興櫃.** 上市 and 上櫃 are confirmed above. Whether an equivalent open dataset exists for 興櫃
+  is unverified — if it does not, `市場別` carries two of its three values and 興櫃 issuers are
+  simply absent. Worth one check before the facet promises three.
+- **The column itself, by direct observation.** `mopsfin.twse.com.tw` and `data.gov.tw` are both
+  refused by this environment's egress proxy (403 on CONNECT), so the field list above comes
+  from two independent secondary sources, not from opening the file. **The harvester must verify
+  rather than assume**: assert the header contains 公司代號, 公司名稱 and 營利事業統一編號 on every
+  run and fail loudly if not. That is the same discipline `apply_delta.py` already applies to
+  grants — read it back, fail if it did not land — and the right shape for a daily-republished
+  government file whose schema nobody promised to keep.
+
+### Where it lands here
+
+`dim_ticker.tax_id`, nullable, with a unique index. Nullable because ETFs, TDRs and anything
+auto-discovered by a T86 fetch will never have one, and a NOT NULL column would make the
+harvester's normal case an error.
