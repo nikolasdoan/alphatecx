@@ -71,6 +71,7 @@ Catalog of every page in `docs/wiki/`. One line per page. Update on every create
 - [view_ticker_momentum refresh break](topics/view-ticker-momentum-refresh-break.md) — issuer renames split one `ticker_id` into two grouped rows and violate `idx_vtm_ticker`; fails silently under `continue-on-error`
 - [Risk Guard](topics/risk-guard.md) — post-close loss-prevention system (`rg_*`): M1 risk light, M2 stops + entry checklist, M2b settlement check; never emits buy signals
 - [FinMind integration (Phase 2)](topics/finmind-phase2-plan.md) — deferred Tool Review v2 items needing a FinMind token: dividend_trap/填息 probability, governance news overlay, dividend-adjusted flatness
+- [marketecx](topics/marketecx.md) — joining bizmap's business census and tecxwork's hiring data to this repo behind a Claude connector; alphatecx is the one side with no 統一編號, and nothing may pull from a Postgres with TLS disabled
 
 ## Log
 - [log.md](log.md) — append-only chronological record
