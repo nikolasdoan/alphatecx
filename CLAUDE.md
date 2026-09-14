@@ -26,6 +26,7 @@ python -m src.news.harvest                  # news feeds only, one batch
 python -m src.news.watch --once             # news poller, one cycle (loops without --once)
 python -m src.cron.brief --mode post_close  # pre_market | intraday | post_close
 python -m src.backfill.run --days 90 --only t86
+python -m src.harvester.tax_ids --out listed_companies.csv [--load]  # 統編 bridge for bizmap, on demand
 python -m src.dashboard.build               # regenerates static/ dashboard
 python -m riskguard.pipeline --mode post_close
 python apply_schema.py [--rls]              # apply sql/ to whatever DATABASE_URL points at

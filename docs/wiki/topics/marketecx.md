@@ -3,7 +3,7 @@ title: marketecx — what alphatecx contributes, and the one column it is missin
 type: topic
 slug: marketecx
 date: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 belongs_to: [system-architecture, mcp-server]
 source: synthesis
 status: proposed
@@ -28,9 +28,10 @@ repo.
 
 ## Current state
 
-Proposed, not started. Nothing in this repo has changed.
+Proposed. One piece is built: the 統編 bridge — `dim_ticker.tax_id` plus the table bizmap asked
+for (see *The bridge — built 2026-09-15* at the end). Nothing else in this repo has changed.
 
-### The missing column
+### The missing column — closed 2026-09-15
 
 **alphatecx holds no 統一編號 anywhere.** `dim_ticker` is keyed on `ticker_id` and carries
 `company_name`, `market`, `ai_pillar`, `node`, `us_partners`. A grep for 統一編號 / `tax_id` /
@@ -105,6 +106,9 @@ Recorded here because these are the things that will be got wrong if they are re
 - 2026-09-14 — proposed by [niko]; all three codebases read and the design written up in
   bizmap. The 統編 gap on `dim_ticker` identified as the cheapest and highest-value change in
   the plan. Nothing implemented here.
+- 2026-09-15 — the bridge built for [niko] by [claude-agent]: harvester, migration 027, 13
+  tests; the table delivered to bizmap; the SQL verified on a throwaway local Postgres. Not yet
+  applied to Zeabur.
 
 ---
 
@@ -124,10 +128,10 @@ feed would muddy that.
 TWSE publishes company basic data as open data, and **營利事業統一編號 sits in the same row as
 公司代號**. There is no matching step to be confident about:
 
-| | 上市 | 上櫃 |
-|---|---|---|
-| data.gov.tw dataset | [18419](https://data.gov.tw/dataset/18419) | [25036](https://data.gov.tw/dataset/25036) |
-| CSV | `https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv` | `https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv` |
+| | 上市 | 上櫃 | 興櫃 (confirmed 09-15) |
+|---|---|---|---|
+| data.gov.tw dataset | [18419](https://data.gov.tw/dataset/18419) | [25036](https://data.gov.tw/dataset/25036) | [28568](https://data.gov.tw/dataset/28568) |
+| CSV | `https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv` | `https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv` | `https://mopsfin.twse.com.tw/opendata/t187ap03_R.csv` |
 
 Published columns, in order: 出表日期, 公司代號, 公司名稱, 公司簡稱, 外國企業註冊地國, 產業別,
 住址, **營利事業統一編號**, 董事長, 總經理, … The file carries far more than is wanted; take four
@@ -158,11 +162,13 @@ no application, no key. That is exactly the bar bizmap set.
 `match == "exact"` as it asked, without the column's meaning changing if a fuzzy source is ever
 added; and it makes a future degradation visible rather than silent.
 
-### What is NOT confirmed
+### What was not confirmed on 09-14 — both confirmed 09-15
 
 - **興櫃.** 上市 and 上櫃 are confirmed above. Whether an equivalent open dataset exists for 興櫃
   is unverified — if it does not, `市場別` carries two of its three values and 興櫃 issuers are
   simply absent. Worth one check before the facet promises three.
+  **Confirmed:** `t187ap03_R.csv`, dataset 28568 (興櫃公司基本資料), same publisher, same licence,
+  daily — 363 companies. `市場別` carries all three values.
 - **The column itself, by direct observation.** `mopsfin.twse.com.tw` and `data.gov.tw` are both
   refused by this environment's egress proxy (403 on CONNECT), so the field list above comes
   from two independent secondary sources, not from opening the file. **The harvester must verify
@@ -170,9 +176,77 @@ added; and it makes a future degradation visible rather than silent.
   run and fail loudly if not. That is the same discipline `apply_delta.py` already applies to
   grants — read it back, fail if it did not land — and the right shape for a daily-republished
   government file whose schema nobody promised to keep.
+  **Confirmed** from [niko]'s machine, which has no such proxy: all three files carry the
+  33-column header exactly as listed. The harvester asserts it anyway.
 
 ### Where it lands here
 
 `dim_ticker.tax_id`, nullable, with a unique index. Nullable because ETFs, TDRs and anything
 auto-discovered by a T86 fetch will never have one, and a NOT NULL column would make the
 harvester's normal case an error.
+
+---
+
+## The bridge — built 2026-09-15
+
+Built to the spec above, on branch `feat/tax-id-bridge`, stacked on
+[PR #19](https://github.com/tecxmate/alphatecx/pull/19).
+
+| Piece | Where |
+|---|---|
+| Fetch, parse, export | `src/harvester/tax_ids.py` — `python -m src.harvester.tax_ids --out listed_companies.csv [--load]` |
+| Landing | `loader.upsert_tax_ids`; `sql/027_dim_ticker_tax_id.sql`, listed in `apply_schema.py` and `apply_delta.py` |
+| Tests | `tests/test_tax_ids.py` — 13, offline |
+| The table | 2,340 rows (上市 1,086 · 上櫃 891 · 興櫃 363), as of 2026-09-14, delivered to `tecxmate/bizmap` as `pipeline/listed_companies.csv` |
+
+### Minimise downloading — and why every column still comes from the file
+
+[niko] asked whether alphatecx's own data could stand in for downloading, since it already
+holds most of this. It does hold most of it: **1,967 of the 1,977 上市/上櫃 companies are
+already in `dim_ticker`**, with ticker, market and short name. But the one essential column is
+in no table at all, so one fetch is unavoidable — **1.45 MB for all three markets** — and the
+delivered table was built from that single copy.
+
+The display columns come from the same file anyway, for two reasons found while checking:
+
+- **Provenance.** bizmap's condition is 政府資料開放授權條款. The file carries it; `dim_ticker`'s
+  names and markets come from T86 trading feeds, not from an OGDL-licensed dataset.
+- **Accuracy.** On the Neon copy (last written 2026-07-30), `dim_ticker.market` disagrees with
+  the file for **9 companies** — 3653 健策 and 6515 穎崴 carried as TPEX but listed 上市, 5347 世界
+  and 6125 廣運 carried as TWSE but listed 上櫃, among others. Some may be moves since July; not
+  re-checked against Zeabur. It also holds 52 four-digit tickers that appear in none of the
+  three current files (2311 日月光, 2448 晶電 …, and the TDRs); those stay NULL.
+
+**Consequence: not in the nightly harvest.** A company keeps its 統一編號, so a refresh only
+picks up new listings. Run the command when bizmap needs a fresh copy.
+
+### What opening the files showed
+
+Three things the spec could not have known:
+
+- **Every TDR's 統一編號 is `00000000`** in eight rows. They would violate the unique index on
+  the first load, so they are skipped.
+- **Names carry HTML character references** — `邁&#33834;科技股份有限公司`,
+  `&#20870;星科技股份有限公司`. Decoded with `html.unescape`.
+- **The CSV is served as `text/csv` with no charset**, so `requests`' `r.text` decodes it as
+  ISO-8859-1 and every Chinese column turns to mojibake. The fetch decodes the bytes as UTF-8.
+
+### Verification
+
+- **Against 財政部's registry**, using the copy bizmap already had on disk (snapshot 14-SEP-26,
+  no download): 2,220 of 2,340 present, 2,178 under an identical name. The 120 absent are 119
+  foreign-registered issuers plus 3718 中光電投資控股. **676 are registered in 臺北市 and 417 in
+  新北市** — the 1,093 bizmap's census can actually join.
+- **The SQL, against a throwaway local Postgres 17**, since the suite has no DB: 027 applies
+  twice cleanly; `--load` assigns 統編 to listed tickers, leaves ETF, TDR and retired rows NULL
+  and writes `ingestion_log`; a re-run touches 0 rows; a ticker change moves the 統編 by
+  releasing then assigning, and assigning without releasing first raises `UniqueViolation` —
+  the negative control for why the loader orders its two statements that way.
+
+### Not yet live
+
+Migration 027 is applied nowhere. On [niko]'s Mac `.env` still points at the Neon rollback copy
+(data ends 2026-07-30), not Zeabur as CLAUDE.md says, so a local `apply_schema.py` would migrate
+the wrong database. To land it: `apply_delta.py` against the Zeabur DSN, then
+`python -m src.harvester.tax_ids --out listed_companies.csv --load` with `DATABASE_URL` set to
+the same DSN.
