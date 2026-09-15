@@ -3,12 +3,12 @@ title: marketecx — what alphatecx contributes, and the one column it is missin
 type: topic
 slug: marketecx
 date: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 belongs_to: [system-architecture, mcp-server]
 source: synthesis
 status: proposed
 tags: [marketecx, integration, mcp, identity]
-related: [system-architecture, mcp-server, taiwan-ai-supply-chain]
+related: [system-architecture, mcp-server, taiwan-ai-supply-chain, 2026-09-15-alphatecx-feeds-bizmap-not-sold]
 ---
 
 ## Summary
@@ -106,9 +106,14 @@ Recorded here because these are the things that will be got wrong if they are re
 
 ## Open questions
 
-- Is marketecx a product or an internal research tool? Republishing TWSE-derived figures
-  inside a commercial product is not the same as one person consulting them, and this repo was
-  built for the latter.
+- ~~Is marketecx a product or an internal research tool?~~ **Answered 2026-09-15 —
+  [decision](../decisions/2026-09-15-alphatecx-feeds-bizmap-not-sold.md).** A product, and
+  bizmap/marketecx is the only surface that is sold; alphatecx is not. The concern behind the
+  question stands and is now a per-source rule rather than a per-product one: republishing
+  TWSE-derived figures inside a commercial product is not the same as one person consulting
+  them, so **what may cross into a paid bizmap surface is decided by the source's licence, not
+  by which repo it was copied out of.** The 統編 bridge (政府資料開放授權條款) may; FinMind,
+  yfinance and scraped series may not, as rows.
 - Does *hiring lead revenue*? tecxwork's openings against `raw_monthly_revenue`, using the
   `q_lead_lag` / `q_cointegration_pair` machinery that already exists here. It is the entire
   justification for tecxwork's involvement and it is testable on history rather than assumed.
@@ -121,6 +126,9 @@ Recorded here because these are the things that will be got wrong if they are re
 - 2026-09-14 — proposed by [niko]; all three codebases read and the design written up in
   bizmap. The 統編 gap on `dim_ticker` identified as the cheapest and highest-value change in
   the plan. Nothing implemented here.
+- 2026-09-15 — [niko] settled the commercial shape: bizmap/marketecx is the flagship and the
+  only thing sold; tecxwork and alphatecx feed it and are not monetised. Supersedes
+  [2026-08-08-commercialization-direction](../decisions/2026-08-08-commercialization-direction.md).
 
 ---
 
