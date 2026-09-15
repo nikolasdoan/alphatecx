@@ -280,6 +280,38 @@ def upsert_supply_chain(df: pl.DataFrame, c=None) -> int:
     return len(records)
 
 
+def upsert_tax_ids(rows: list[dict], c=None) -> int:
+    """Set dim_ticker.tax_id from the 統一編號 bridge (src/harvester/tax_ids.py).
+
+    Touches only tickers dim_ticker already holds — membership stays with the T86 and seed
+    paths — so 興櫃 rows, which T86 never lists, change nothing here and live only in the
+    exported table.
+
+    A 統一編號 the file no longer pairs with a ticker is released first. The index is unique
+    and a company that changes its code keeps its 統一編號, so assigning it to the new code
+    while the old row still held it would fail. Pass an atomic() cursor so both statements
+    commit together.
+    """
+    if not rows:
+        return 0
+    pairs = ([r["ticker_id"] for r in rows], [r["tax_id"] for r in rows])
+    with _cursor_or_default(c) as cc:
+        cc.execute("""
+            UPDATE dim_ticker SET tax_id = NULL, updated_at = now()
+            WHERE tax_id IS NOT NULL
+              AND (ticker_id, tax_id) NOT IN (SELECT * FROM unnest(%s::text[], %s::text[]))
+        """, pairs)
+        released = cc.rowcount
+        cc.execute("""
+            UPDATE dim_ticker d SET tax_id = i.tax_id, updated_at = now()
+            FROM unnest(%s::text[], %s::text[]) AS i(ticker_id, tax_id)
+            WHERE d.ticker_id = i.ticker_id AND d.tax_id IS DISTINCT FROM i.tax_id
+        """, pairs)
+        assigned = cc.rowcount
+    log.info("dim_ticker.tax_id: %d assigned, %d released", assigned, released)
+    return assigned
+
+
 # ── Ingestion log ───────────────────────────────────────────────────────────
 
 def log_ingestion(source: str, target_date: str | None, rows: int,

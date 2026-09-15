@@ -20,6 +20,15 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The only workflow here that lacked one, and the only one whose result is a
+  # required check on main — so it is the one where a run that never starts is
+  # expensive. #20 hit exactly that: a push while the PR's base was a branch
+  # whose own PR had just merged produced no `synchronize` run at all, leaving
+  # the PR unmergeable behind a `test` check that could not be made to run.
+  # Without this the only ways out are an empty commit or a close-and-reopen,
+  # both of which lie about what happened. Every other workflow in this
+  # directory already has it.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -1279,6 +1279,15 @@ attributed_to: [niko]   belongs_to: [marketecx, system-architecture]
 - Two details kept. Three registered names contain commas — `TPK Holding Co., Ltd.`, `AES Holding Co., Ltd.`, `91APP, Inc.` — correctly quoted, so a naive `split(',')` corrupts three rows where a real parser does not; bizmap reads every CSV through `csv.DictReader`, so it is safe there. And 2,220 of 2,340 are present in bizmap's registry, the 120 absent being 119 foreign-registered issuers plus one domestic ticker — the expected shape, not a matching failure.
 - updated [topics/marketecx.md](topics/marketecx.md). No code changed here; the harvester lives in `src/harvester/tax_ids.py`.
 
+## [2026-09-15] decision | The 統編 bridge's code, and why it refreshes on demand rather than nightly
+attributed_to: [niko, claude-agent]   belongs_to: [marketecx, system-architecture]
+- The code behind the ingest entry above, in [PR #20](https://github.com/nikolasdoan/alphatecx/pull/20), stacked on #19: `src/harvester/tax_ids.py`, `loader.upsert_tax_ids`, `sql/027_dim_ticker_tax_id.sql`, 13 offline tests. The table was built from a single fetch of the three files.
+- **[niko] asked to minimise downloading, since alphatecx already holds most of it.** It holds ticker, market and short name for 1,967 of the 1,977 上市/上櫃 companies — but 統編 in no table, so one fetch is unavoidable (1.45 MB for all three markets). Every column still comes from the file: bizmap's licence condition covers it and not `dim_ticker`, whose `market` disagrees with the file for 9 companies on the Neon copy. Consequence: not in the nightly harvest — a company keeps its 統編, so a refresh only adds new listings.
+- Three things the files do that the spec could not know: every TDR's 統編 is `00000000` (eight would collide on the unique index), two names carry HTML character references, and the CSV is `text/csv` with no charset, so `r.text` would decode it as ISO-8859-1.
+- Beyond the ingest entry's registry check: 676 of the 2,340 are registered in 臺北市 and 417 in 新北市. The SQL was verified on a throwaway local Postgres, including a negative control for the release-before-assign ordering.
+- **Environment quirk:** this Mac's `.env` points at the Neon rollback copy (data ends 2026-07-30), not Zeabur as CLAUDE.md says — so 027 is applied nowhere yet and needs `apply_delta.py` against the Zeabur DSN.
+- updated [topics/marketecx.md](topics/marketecx.md).
+
 ## [2026-09-15] decision | alphatecx is not sold — bizmap/marketecx is the flagship, and this repo feeds it
 attributed_to: [niko]   belongs_to: [alphatecx, marketecx]
 - [niko]: "monetizing tecxwork and alphatecx both touch legal gray zone, probably need to leverage their data to support bizmap only, bizmap, marketecx system is our flagship product." So **alphatecx is a data source, not a product.**
