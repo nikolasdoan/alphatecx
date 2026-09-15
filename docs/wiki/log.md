@@ -1287,3 +1287,12 @@ attributed_to: [niko, claude-agent]   belongs_to: [marketecx, system-architectur
 - Beyond the ingest entry's registry check: 676 of the 2,340 are registered in 臺北市 and 417 in 新北市. The SQL was verified on a throwaway local Postgres, including a negative control for the release-before-assign ordering.
 - **Environment quirk:** this Mac's `.env` points at the Neon rollback copy (data ends 2026-07-30), not Zeabur as CLAUDE.md says — so 027 is applied nowhere yet and needs `apply_delta.py` against the Zeabur DSN.
 - updated [topics/marketecx.md](topics/marketecx.md).
+
+## [2026-09-15] decision | alphatecx is not sold — bizmap/marketecx is the flagship, and this repo feeds it
+attributed_to: [niko]   belongs_to: [alphatecx, marketecx]
+- [niko]: "monetizing tecxwork and alphatecx both touch legal gray zone, probably need to leverage their data to support bizmap only, bizmap, marketecx system is our flagship product." So **alphatecx is a data source, not a product.**
+- That **supersedes [2026-08-08-commercialization-direction](decisions/2026-08-08-commercialization-direction.md)**, whose Phase 1 was a Stripe-gated MCP connector. Its own 2026-08-09 settlement had already said the private framing is what defers the investment-advice licensing gate and that "that gate reopens the moment this becomes a public/commercial offering" — dropping Phase 1 closes the gate rather than deferring it again. Phase 2 (headless app) and mobile go with it.
+- **The constraint worth not getting wrong: a licence travels with the data, not with the repository.** Deciding this repo isn't sold doesn't make a FinMind series sellable by copying it into something that is. So "supports bizmap only" is a per-source test — the TWSE 統編 bridge is 政府資料開放授權條款 and may reach a paid surface; prices, flows and valuation series obtained for personal use may not, as rows.
+- The 統編 bridge being clean is not luck: [niko] required provenance *before* the file was fetched, on the grounds that a vendor feed would have cost bizmap the facet.
+- Nothing owed to a lawyer here any more — no money is taken here. The compliance question moves to bizmap and is a different one (registry republication, 個資法).
+- created [decisions/2026-09-15-alphatecx-feeds-bizmap-not-sold.md](decisions/2026-09-15-alphatecx-feeds-bizmap-not-sold.md); updated [decisions/2026-08-08-commercialization-direction.md](decisions/2026-08-08-commercialization-direction.md) → superseded, [topics/marketecx.md](topics/marketecx.md), [index.md](index.md). No code changed.
