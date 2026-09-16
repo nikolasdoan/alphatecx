@@ -183,9 +183,16 @@ class TestThePageIsReachableAndScoped:
 
     def test_the_map_is_not_behind_the_chat_gate(self):
         """The gate names exactly what it covers. /market-map must not be in it —
-        and if someone later decides it should be, this test is where they say so."""
-        matcher = (ROOT / "web" / "middleware.ts").read_text()
-        assert "market-map" not in matcher, (
+        and if someone later decides it should be, this test is where they say so.
+
+        Scoped to the matcher rather than the whole file: the middleware's
+        comments name the public pages when explaining what stays out of the
+        gate, and a bare substring search reads that explanation as a violation.
+        """
+        src = (ROOT / "web" / "middleware.ts").read_text()
+        block = re.search(r"matcher:\s*\[(.*?)\]", src, re.S)
+        assert block, "could not locate config.matcher"
+        assert "market-map" not in block.group(1), (
             "the market map is a public page; gating it needs a deliberate "
             "change here and on the landing page that links to it"
         )
