@@ -82,6 +82,36 @@ would need an env var set on Vercel before the page worked at all — and
 costs 24 KB and can rot; the page therefore renders `asof` and its age, and
 `tests/test_web_market_map.py` fails if the two files differ.
 
+## Amendment, same day — the two zones outside Taiwan
+
+[niko] asked for 終端客戶 as blocks outside the Taiwan rectangle, and for the
+foreign upstream (equipment, materials, ASML) outside it on the other side. §01
+now draws three zones, and the interesting part is that they have three
+different provenances — which is the reason the page can carry hand-written
+context at all without undermining the rest.
+
+| Zone | Source | Drawn as |
+|---|---|---|
+| 台灣上市櫃 (middle) | our data — prices, flow, correlation | filled, coloured by pillar, inside a labelled rectangle |
+| 終端客戶 (right) | derived from the classification's `partners` field | outlined, with the count of Taiwan suppliers |
+| 國外上游 (left) | hand-written industry context | dashed, unfilled, **no number anywhere** |
+
+Two rules fell out of that:
+
+- **No line per foreign firm.** We hold no edge data upstream, so one aggregate
+  inflow arrow says what flows in without asserting who sells to whom.
+- **Customer links only for the current selection.** All ~120 at once bury the
+  chain. Hovering a customer runs the graph backwards — "who in 台股 sells to
+  NVIDIA?" is 14 of the 51.
+
+`partners` needed three filters before it could be counted: end-uses that are
+not firms (`auto`, `IDMs`, `various`), one firm spelled two ways
+(`NVIDIA-via-PCB` is an edge property, not a second customer), and entries that
+are Taiwanese (`TSMC` is 2330; `TPC` is 台電) or upstream (ASML, Applied
+Materials, Lam, KLA). `tests/test_web_chain_zones.py` caught `Arm` sitting in
+both the upstream band and 2454's partners — invisible today because one mention
+is below the threshold, and a double-count the moment a second name cited it.
+
 ## Consequences
 
 - New: `web/app/market-map/` (page + three client components), `web/lib/market-map.ts`,
