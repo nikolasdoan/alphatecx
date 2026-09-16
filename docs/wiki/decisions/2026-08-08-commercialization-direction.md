@@ -3,14 +3,22 @@ title: Commercialization direction — MCP connector first, headless Claude app 
 type: decision
 slug: 2026-08-08-commercialization-direction
 date: 2026-08-08
-updated: 2026-08-08
+updated: 2026-09-15
 attributed_to: [niko, brian, antigravity-agent]
 belongs_to: [alphatecx]
 source: chat
-status: active
+status: superseded
 tags: [commercialization, product, connector, mcp, oauth, safety, compliance, monetization]
-related: [system-architecture, 2026-07-31-risk-guard-phase1, brian, niko]
+related: [system-architecture, 2026-07-31-risk-guard-phase1, 2026-09-15-alphatecx-feeds-bizmap-not-sold, brian, niko]
 ---
+
+> **Superseded 2026-09-15.** [niko] ruled that alphatecx is not sold at all — it feeds
+> bizmap/marketecx, which is the flagship and the only commercial surface. Phase 1's Stripe
+> gate is not being built, and Phase 2 and mobile are off the table rather than deferred.
+> See [2026-09-15-alphatecx-feeds-bizmap-not-sold](2026-09-15-alphatecx-feeds-bizmap-not-sold.md).
+> The reasoning below is kept because the 2026-08-09 settlement — private framing defers the
+> licensing gate, and a commercial offering reopens it — is exactly what the new decision
+> acts on.
 
 ## Context
 

@@ -38,6 +38,7 @@ DELTA_FILES = [
     "sql/026_macro.sql",
     "sql/024_read_grants_backfill.sql",
     "sql/025_owner_profile.sql",
+    "sql/027_dim_ticker_tax_id.sql",
 ]
 
 

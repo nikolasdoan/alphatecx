@@ -60,6 +60,7 @@ sql_files = [
     # file's own trailing comment spells out. Safe in the base list because it
     # creates the table without touching a role that may not exist yet.
     "sql/026_macro.sql",
+    "sql/027_dim_ticker_tax_id.sql",
 ]
 # 024 is deliberately absent from the base list: every statement in it is guarded
 # on mcp_viewer existing, so a base pass would be a pure no-op. It only belongs
