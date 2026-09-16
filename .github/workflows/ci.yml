@@ -18,6 +18,14 @@ name: CI
 
 on:
   pull_request:
+    # Spelled out because the DEFAULT set is [opened, synchronize, reopened] —
+    # `ready_for_review` is not in it. That gap cost #21 a merge: the PR was
+    # opened by an app token (which triggers no workflow at all), so the only
+    # `test` run came from workflow_dispatch, and branch protection does not
+    # accept a dispatch run for a required check. Marking the draft ready
+    # produced nothing either, because of this list. Naming the types means a
+    # draft that becomes ready gets the check it is about to be judged on.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   # The only workflow here that lacked one, and the only one whose result is a
