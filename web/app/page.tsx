@@ -132,10 +132,16 @@ export default function Home() {
 
 				<nav className="flex flex-wrap gap-3">
 					<Link
-						href="/coverage"
+						href="/market-map"
 						className="rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
 					>
-						Coverage &amp; method →
+						台股結構地圖 →
+					</Link>
+					<Link
+						href="/coverage"
+						className="rounded-md border border-border px-5 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+					>
+						Coverage &amp; method
 					</Link>
 					<Link
 						href="/chat"
