@@ -1,5 +1,14 @@
 import Link from "next/link";
 
+/* The same switch the middleware reads, so the link and the route it points at
+   turn off together. A link to a 404 is worse than no link: it reads as a bug
+   in the site rather than as a surface that is deliberately closed.
+
+   Read at build, which is fine because this page is static and flipping the
+   variable needs a redeploy anyway — the two cannot drift apart within a
+   deployment, which is the property that matters. */
+const CHAT_ENABLED = process.env.CHAT_ENABLED === "true";
+
 export const metadata = {
 	title: "alphatecx — Taiwan market data infrastructure",
 	description:
@@ -143,12 +152,14 @@ export default function Home() {
 					>
 						Coverage &amp; method
 					</Link>
-					<Link
-						href="/chat"
-						className="rounded-md border border-border px-5 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-					>
-						Research terminal
-					</Link>
+					{CHAT_ENABLED && (
+						<Link
+							href="/chat"
+							className="rounded-md border border-border px-5 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+						>
+							Research terminal
+						</Link>
+					)}
 				</nav>
 
 				<footer className="mt-20 border-t border-border pt-6 text-xs text-muted-foreground">

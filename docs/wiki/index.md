@@ -49,6 +49,7 @@ Catalog of every page in `docs/wiki/`. One line per page. Update on every create
 ## Topics
 *Areas, products, events, and synthesised concepts. Topics don't make decisions; stakeholders do.*
 
+- [The research terminal's off switch](topics/chat-terminal-switch.md) — `CHAT_ENABLED`, defaulting to off: the four distinguishable states (closed 404 / misconfigured 503 / open 401 / public 200), why a typo must land on closed, and the two variables that turn it back on
 - [Commercial productization](topics/commercial-productization.md) — paid connector plan: MoR payments (Stripe can't be merchant from VN/TW), multi-tenant OAuth, per-customer metering, `_disclaimer` on `_stamp()`
 - [Paid connector — deploy checklist](topics/paid-connector-deploy.md) — runbook to take Layers 0–2 + metering + billing live: migrate → deploy → provision → verify; billing + rollback
 - [Investing principles](topics/investing-principles.md) — school-neutral universal principles as a reasoning layer (distilled + attributed, not ingested); `investing_principles` tool, tier-aware emphasis; data tools stay clean

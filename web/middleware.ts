@@ -27,6 +27,25 @@ import { type NextRequest, NextResponse } from "next/server";
  * docs/wiki/topics/console-auth.md — not a bigger version of this file.
  */
 
+/**
+ * OFF SWITCH, and it defaults to OFF.
+ *
+ * The chat was already unreachable before this existed — `CHAT_PASSWORD` was
+ * never set on Vercel, so every request 503'd. That is the exact failure this
+ * repo already learned to avoid on the Telegram side: an unset secret is
+ * indistinguishable from breakage, and CLAUDE.md says so out loud after every
+ * alert sat at `pushed:false` for weeks behind a missing token. "Off" and
+ * "broken" have to look different, or nobody can tell which one they are
+ * looking at six weeks later.
+ *
+ * So the state is declared rather than inferred. Default off means the switch
+ * needs no action on Vercel to take effect, and turning the terminal back on is
+ * two deliberate variables — `CHAT_ENABLED=true` AND a `CHAT_PASSWORD` — rather
+ * than one forgotten one. Anything other than the exact string "true" is off:
+ * a typo should leave it closed.
+ */
+const CHAT_ENABLED = process.env.CHAT_ENABLED === "true";
+
 const USER = process.env.CHAT_USER || "alphatecx";
 const PASSWORD = process.env.CHAT_PASSWORD;
 
@@ -62,6 +81,20 @@ function challenge(): NextResponse {
 }
 
 export function middleware(request: NextRequest) {
+	// Switched off: the routes do not exist. 404 rather than 401 or 503 because
+	// those both advertise something worth coming back for — 401 says "guess the
+	// password" and 503 says "try later". Off should look like nothing is here,
+	// and it leaks nothing about what the routes would have reached.
+	//
+	// Safe for the public pages: `/`, `/coverage` and `/market-map` are fully
+	// static and call no API route, so none of this is on their path.
+	if (!CHAT_ENABLED) {
+		return new NextResponse("Not found.", {
+			status: 404,
+			headers: { "Cache-Control": "no-store" },
+		});
+	}
+
 	// FAIL CLOSED. An unset secret must deny, never allow — the failure mode of
 	// the opposite choice is a gate that looks installed and is not, which is
 	// strictly worse than no gate because nobody goes back to check. 503 rather

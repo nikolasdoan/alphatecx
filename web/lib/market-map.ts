@@ -242,8 +242,217 @@ function longestUpstream(edges: ChainEdge[]): Map<string, number> {
 	return tier;
 }
 
-const CHAIN_W = 1100;
-const CHAIN_H = 620;
+/* ── The two bands OUTSIDE Taiwan ─────────────────────────────────────────
+
+   The chain does not start or end in Taiwan, and a map that stops at the
+   coastline implies it does. Upstream, the tools and the chemistry are a
+   handful of foreign firms — one of them, ASML, with no competitor at all.
+   Downstream, essentially the whole AI build is bought by a dozen American
+   names. Both facts do more to explain a move in 台積電 than anything inside
+   the Taiwan box.
+
+   PROVENANCE, and it differs between the three zones — the page says so and
+   draws them differently:
+
+   · Taiwan box   — our data. Prices, institutional flow, 120-day correlation,
+                    everything the other two graphs are computed from.
+   · Right band   — DERIVED from the snapshot's own `partners` field, which is
+                    the hand-maintained classification, normalised and filtered
+                    here. Real edges; we just do not hold the customers' prices.
+   · Left band    — CONTEXT, hand-written, and the only part of this page not
+                    read off the data. It carries no numbers for that reason.
+*/
+
+export type Country = "US" | "JP" | "NL" | "KR" | "UK";
+
+export interface ForeignBlock {
+	name: string;
+	country: Country;
+}
+
+export interface ForeignGroup {
+	zh: string;
+	note: string;
+	members: ForeignBlock[];
+}
+
+/**
+ * What Taiwan buys to make any of this. Hand-written context, not data.
+ *
+ * Deliberately short: the point is the CHOKE POINTS, not a directory. ASML is
+ * the whole EUV market; three firms cover most deposition and etch; Japanese
+ * chemistry dominates resist and the wafers themselves. Listing fifty names
+ * would say less than these do.
+ */
+export const UPSTREAM_GROUPS: ForeignGroup[] = [
+	{
+		zh: "微影設備",
+		note: "EUV 全球獨家",
+		members: [{ name: "ASML", country: "NL" }],
+	},
+	{
+		zh: "製程設備",
+		note: "沉積・蝕刻・檢測",
+		members: [
+			{ name: "Applied Materials", country: "US" },
+			{ name: "Lam Research", country: "US" },
+			{ name: "KLA", country: "US" },
+			{ name: "Tokyo Electron", country: "JP" },
+		],
+	},
+	{
+		zh: "材料・化學",
+		note: "光阻・矽晶圓・特化",
+		members: [
+			{ name: "Shin-Etsu", country: "JP" },
+			{ name: "SUMCO", country: "JP" },
+			{ name: "JSR", country: "JP" },
+			{ name: "Tokyo Ohka", country: "JP" },
+		],
+	},
+	{
+		zh: "EDA・IP",
+		note: "設計工具與矽智財",
+		members: [
+			{ name: "Synopsys", country: "US" },
+			{ name: "Cadence", country: "US" },
+			{ name: "Arm", country: "UK" },
+		],
+	},
+];
+
+/* Tokens in `partners` that are not companies. They are market segments and
+   end uses — rendering them as customer blocks would invent buyers. */
+const NOT_A_COMPANY = new Set([
+	"auto",
+	"AI-PC",
+	"industrial",
+	"various",
+	"IDMs",
+	"Global Data Centers",
+	"US Utility Companies",
+	"US-utilities",
+]);
+
+/* Same firm, written two ways by the classification. `-via-PCB` records that
+   the relationship is one hop removed, which is a fact about the EDGE, not a
+   different customer. */
+const PARTNER_ALIASES: Record<string, string> = {
+	"NVIDIA-via-PCB": "NVIDIA",
+	"Broadcom-via-PCB": "Broadcom",
+};
+
+/* In `partners`, but upstream of Taiwan rather than downstream of it: the
+   equipment makers our 廠務 and 設備代理 names work WITH, and the IP that 聯發科
+   licenses IN. They belong in the left band, and counting them as customers
+   would put ASML on both sides of the box.
+
+   Arm is here because tests/test_web_chain_zones.py caught it: it sits in the
+   upstream band AND in 2454's `partners`. One mention is below the customer
+   threshold today, so nothing was visibly wrong — which is exactly why it
+   needed pinning rather than eyeballing. */
+const PARTNERS_THAT_ARE_SUPPLIERS = new Set([
+	"ASML",
+	"Applied Materials",
+	"Lam Research",
+	"KLA",
+	"Arm",
+]);
+
+/* Taiwanese entities that appear in `partners`. TSMC is 2330, already a node in
+   the box; TPC is 台電. Neither is foreign and neither gets a block. */
+const PARTNERS_THAT_ARE_TAIWANESE = new Set(["TSMC", "TPC"]);
+
+export const CUSTOMER_GROUPS: { zh: string; members: string[] }[] = [
+	{ zh: "晶片設計", members: ["NVIDIA", "AMD", "Broadcom", "Intel", "Apple"] },
+	{
+		zh: "雲端服務",
+		members: ["AWS", "Microsoft", "Google", "Meta", "Oracle", "OpenAI"],
+	},
+	{
+		zh: "伺服器品牌",
+		members: ["Dell", "HPE", "Supermicro", "Lenovo", "Inspur"],
+	},
+	{
+		zh: "其他終端",
+		members: [
+			"Tesla",
+			"Micron",
+			"Kingston",
+			"Texas Instruments",
+			"Arista Networks",
+		],
+	},
+];
+
+export interface Customer {
+	name: string;
+	group: string;
+	/** Taiwan tickers that name this firm in `partners`. */
+	suppliers: string[];
+}
+
+/**
+ * 終端客戶, counted off the snapshot rather than asserted.
+ *
+ * Only firms named by at least `minSuppliers` Taiwan companies get a block: one
+ * mention is a single business relationship, and a wall of one-offs would bury
+ * the fact the graph exists to show — that a dozen American buyers sit at the
+ * end of nearly every chain in the box.
+ */
+export function buildCustomers(minSuppliers = 2): Customer[] {
+	const byName = new Map<string, string[]>();
+	for (const n of snapshot.nodes) {
+		for (const raw of n.partners) {
+			const name = PARTNER_ALIASES[raw] ?? raw;
+			if (NOT_A_COMPANY.has(name)) continue;
+			if (PARTNERS_THAT_ARE_SUPPLIERS.has(name)) continue;
+			if (PARTNERS_THAT_ARE_TAIWANESE.has(name)) continue;
+			const list = byName.get(name) ?? [];
+			if (!list.includes(n.id)) list.push(n.id);
+			byName.set(name, list);
+		}
+	}
+	const groupOf = new Map<string, string>();
+	for (const g of CUSTOMER_GROUPS)
+		for (const m of g.members) groupOf.set(m, g.zh);
+
+	return [...byName.entries()]
+		.filter(([, suppliers]) => suppliers.length >= minSuppliers)
+		.map(([name, suppliers]) => ({
+			name,
+			group: groupOf.get(name) ?? "其他終端",
+			suppliers,
+		}))
+		.sort(
+			(a, b) =>
+				b.suppliers.length - a.suppliers.length || a.name.localeCompare(b.name),
+		);
+}
+
+/* ── Geometry ─────────────────────────────────────────────────────────────
+   Three zones side by side. The Taiwan box is a real rectangle rather than
+   implied whitespace, because the whole point of the two bands is that they
+   are OUTSIDE it — and because only what is inside carries data. */
+
+export const CHAIN = {
+	width: 1560,
+	height: 760,
+	/** Left band: foreign upstream. */
+	upstreamX: 26,
+	bandW: 176,
+	/** The Taiwan rectangle. */
+	twX: 252,
+	twW: 1000,
+	/** Right band: end customers. */
+	customerX: 1302,
+	/** Where the tier columns live, inset from the rectangle's edges. */
+	innerPad: 78,
+	top: 64,
+} as const;
+
+const CHAIN_W = CHAIN.twW;
+const CHAIN_H = CHAIN.height - CHAIN.top - 60;
 
 export function buildChain() {
 	const tier = longestUpstream(snapshot.edges);
@@ -278,14 +487,23 @@ export function buildChain() {
 			tiered.push({
 				...n,
 				tier: t,
-				cx: 90 + (maxTier === 0 ? 0 : t * ((CHAIN_W - 180) / maxTier)),
-				cy: step * (i + 1),
+				cx:
+					CHAIN.twX +
+					CHAIN.innerPad +
+					(maxTier === 0 ? 0 : t * ((CHAIN_W - 2 * CHAIN.innerPad) / maxTier)),
+				cy: CHAIN.top + step * (i + 1),
 			});
 		});
 	});
 
 	const unmapped = snapshot.nodes.length - members.length;
-	return { tiered, maxTier, unmapped, width: CHAIN_W, height: CHAIN_H };
+	return {
+		tiered,
+		maxTier,
+		unmapped,
+		width: CHAIN.width,
+		height: CHAIN.height,
+	};
 }
 
 /* ── The thing neither a quote app nor a value-chain directory shows ──────
