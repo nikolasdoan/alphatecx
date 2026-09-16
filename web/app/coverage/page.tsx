@@ -211,6 +211,16 @@ export default function CoveragePage() {
 							</tbody>
 						</table>
 					</div>
+					<p className="mt-4 text-sm text-muted-foreground">
+						The same distinction, drawn as a 24-hour clock:{" "}
+						<Link
+							href="/market-map"
+							className="text-foreground underline underline-offset-4"
+						>
+							市場時鐘
+						</Link>
+						.
+					</p>
 				</section>
 
 				<section className="mb-16">

@@ -184,6 +184,21 @@ jobs:
         continue-on-error: true
         run: python -m src.quant.correlation_snapshot --window 120
 
+      - name: Sync the public market map's copy of the snapshot
+        # The public page at /market-map is statically generated from a
+        # COMMITTED copy of the snapshot, because it cannot reach the
+        # token-gated one the console serves. Copying it here, between the
+        # regenerate step and the push, is what stops the two drifting: they
+        # land in the same commit or neither does.
+        #
+        # Not continue-on-error. The previous step already is, so a failed
+        # regenerate leaves the old snapshot in place and this copy is a no-op;
+        # if the copy itself fails the two ARE about to diverge, and
+        # tests/test_web_market_map.py would fail the next PR for a reason
+        # nobody would connect to a green nightly run.
+        if: success()
+        run: python scripts/sync_web_snapshot.py
+
       - name: Commit & push refreshed snapshot + dashboard
         # All four static artefacts are sources of truth for the console
         # routes (/d/, /g/, ...). Skipped silently on no-change days.
@@ -203,6 +218,9 @@ jobs:
         # working once is not the same as noticing when it stops.
         if: success()
         continue-on-error: true
+        env:
+          # Optional. Unset is a supported state, handled below.
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
         run: |
           git config user.name  "alphatecx-cron"
           git config user.email "alphatecx-cron@users.noreply.github.com"
@@ -210,7 +228,8 @@ jobs:
                   mcp_server/api/static/graph-view.html \
                   mcp_server/api/static/graph-image.png \
                   mcp_server/api/static/dashboard-page.html \
-                  mcp_server/api/static/ticker/
+                  mcp_server/api/static/ticker/ \
+                  web/lib/graph-snapshot.json
           if git diff --cached --quiet; then
             echo "no static-asset changes to commit"
             exit 0
@@ -219,6 +238,20 @@ jobs:
           if push_log=$(git push origin main 2>&1); then
             echo "$push_log"
             echo "dashboard artefacts pushed"
+            # [skip ci] above is load-bearing: this push uses a DEPLOY KEY, and
+            # unlike GITHUB_TOKEN a deploy-key push DOES re-trigger workflows,
+            # so without it the harvest would run itself in a loop. Vercel reads
+            # the same marker and skips its build, which would leave the public
+            # /market-map serving whatever snapshot the last real deploy carried.
+            # A deploy hook is the way out; unset, it just stays as it was and
+            # the page says how old its data is.
+            if [ -n "${VERCEL_DEPLOY_HOOK:-}" ]; then
+              curl -fsS -X POST "$VERCEL_DEPLOY_HOOK" >/dev/null \
+                && echo "public market map redeploy triggered" \
+                || echo "::warning title=Public map frozen::Snapshot pushed but the Vercel deploy hook did not fire, so stock.tecxmate.com keeps serving the previous snapshot."
+            else
+              echo "VERCEL_DEPLOY_HOOK unset - public market map will refresh on the next deploy"
+            fi
             exit 0
           fi
           echo "$push_log"
