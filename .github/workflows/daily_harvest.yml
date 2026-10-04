@@ -184,20 +184,25 @@ jobs:
         continue-on-error: true
         run: python -m src.quant.correlation_snapshot --window 120
 
-      - name: Sync the public market map's copy of the snapshot
-        # The public page at /market-map is statically generated from a
-        # COMMITTED copy of the snapshot, because it cannot reach the
-        # token-gated one the console serves. Copying it here, between the
-        # regenerate step and the push, is what stops the two drifting: they
-        # land in the same commit or neither does.
+      - name: Publish the snapshot to R2
+        # The public market map reads THIS, not the repository. Publishing to
+        # object storage rather than committing is what removed the deploy key,
+        # the branch-protection bypass, the `[skip ci]` marker and the Vercel
+        # deploy hook from the path between a harvest and the page — all four
+        # existed only to get a 24 KB JSON past a protected branch.
         #
-        # Not continue-on-error. The previous step already is, so a failed
-        # regenerate leaves the old snapshot in place and this copy is a no-op;
-        # if the copy itself fails the two ARE about to diverge, and
-        # tests/test_web_market_map.py would fail the next PR for a reason
-        # nobody would connect to a green nightly run.
+        # Not continue-on-error. The step above already is, so a failed
+        # regenerate leaves the previous snapshot in place and this re-publishes
+        # it harmlessly; but if the upload itself fails, the page silently keeps
+        # serving an older object and that is exactly the kind of quiet staleness
+        # this change exists to end. Self-skips cleanly when R2 is unconfigured.
         if: success()
-        run: python scripts/sync_web_snapshot.py
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/publish_snapshot.py
 
       - name: Commit & push refreshed snapshot + dashboard
         # All four static artefacts are sources of truth for the console
@@ -228,8 +233,7 @@ jobs:
                   mcp_server/api/static/graph-view.html \
                   mcp_server/api/static/graph-image.png \
                   mcp_server/api/static/dashboard-page.html \
-                  mcp_server/api/static/ticker/ \
-                  web/lib/graph-snapshot.json
+                  mcp_server/api/static/ticker/
           if git diff --cached --quiet; then
             echo "no static-asset changes to commit"
             exit 0

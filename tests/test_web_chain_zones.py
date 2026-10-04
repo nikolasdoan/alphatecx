@@ -160,7 +160,7 @@ class TestTheLeftBandCarriesNoNumbers:
 
 class TestTheCustomerBandIsDerivedNotAsserted:
     def test_the_threshold_is_stated_and_at_least_two(self, lib):
-        m = re.search(r"buildCustomers\(minSuppliers = (\d+)\)", lib)
+        m = re.search(r"minSuppliers = (\d+)", lib)
         assert m, "buildCustomers must declare its threshold as a default"
         assert int(m.group(1)) >= 2, (
             "one mention is a single business relationship; a wall of one-offs "

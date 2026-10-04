@@ -12,3 +12,12 @@ plotly>=6.0
 # override (that is how it is exercised in this container).
 kaleido>=1.0.0
 numpy>=2.0
+
+# R2 (S3-compatible) upload of the public snapshot — scripts/publish_snapshot.py.
+# Harvester-only: mcp_server/requirements.txt must NOT gain this, the server
+# reads the snapshot and never publishes it.
+#
+# boto3 rather than a hand-rolled SigV4 signature: a subtly wrong signature
+# fails only against the live endpoint, which is precisely the class of bug
+# this pipeline keeps paying for.
+boto3>=1.34
