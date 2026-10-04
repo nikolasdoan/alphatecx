@@ -51,38 +51,125 @@ def snapshot() -> dict:
     return json.loads(PUBLIC_SNAPSHOT.read_text())
 
 
-class TestTheCommittedCopyIsTheLiveOne:
-    def test_the_two_snapshots_are_byte_identical(self):
-        assert PUBLIC_SNAPSHOT.exists(), (
-            f"{PUBLIC_SNAPSHOT.relative_to(ROOT)} is missing — the public map has "
-            "no data. Run scripts/sync_web_snapshot.py."
+class TestTheSnapshotIsPublishedNotCommitted:
+    """The public map reads object storage; the committed copy is a FALLBACK.
+
+    Until 2026-10-04 these asserted the opposite — that the two files stayed
+    byte-identical, because the page was built from the committed one. That
+    contract is what put a data pipeline behind branch protection: the nightly
+    push needed a deploy-key bypass, the commit needed `[skip ci]` so the
+    deploy key would not re-trigger Actions, and Vercel honoured the same marker
+    so the page then needed a deploy hook. When the deploy key went missing the
+    push was rejected on every run for sixteen days behind a green tick, and the
+    page served a seven-week-old map while the database was current.
+
+    So the tests now pin the replacement, and the first one is the important
+    one: nothing in the nightly path may go back to committing it.
+    """
+
+    def test_the_nightly_job_publishes_rather_than_commits(self):
+        wf = WORKFLOW.read_text()
+        assert "publish_snapshot.py" in wf, (
+            "the daily harvest must publish the snapshot to object storage"
         )
-        assert PUBLIC_SNAPSHOT.read_bytes() == SOURCE_SNAPSHOT.read_bytes(), (
-            "the public copy has drifted from the snapshot the console serves. "
-            "Run scripts/sync_web_snapshot.py and commit both."
+        add_block = wf[wf.index("git add"):wf.index("git diff --cached")]
+        assert "web/lib/graph-snapshot.json" not in add_block, (
+            "the web copy is a hand-refreshed fallback now; committing it "
+            "nightly puts the public page back behind branch protection"
         )
 
-    def test_the_sync_scripts_own_check_agrees(self):
-        """Guards the guard: if --check ever stops comparing, the test above is
-        the only thing left and the nightly job's safety net is gone."""
+    def test_the_publish_step_runs_after_the_snapshot_is_regenerated(self):
+        wf = WORKFLOW.read_text()
+        assert wf.index("correlation_snapshot") < wf.index("publish_snapshot.py"), (
+            "publishing before regenerating would upload yesterday's snapshot"
+        )
+
+    def test_the_zeabur_chain_publishes_too(self):
+        """The whole point of moving off a commit: the runner WITHOUT repository
+        write access can now refresh the public page. In September it was the
+        only one still working, and the page froze anyway."""
+        chain = (ROOT / "deploy" / "daily-chain.sh").read_text()
+        assert "correlation_snapshot" in chain and "publish_snapshot.py" in chain, (
+            "deploy/daily-chain.sh must refresh and publish the snapshot, or "
+            "GitHub Actions is once again the single path to the public page"
+        )
+
+    def test_publishing_is_not_continue_on_error_in_the_workflow(self):
+        """A failed upload means the page keeps serving an older object. That is
+        the exact silent staleness this change exists to end."""
+        wf = WORKFLOW.read_text()
+        step = wf[wf.index("Publish the snapshot to R2"):wf.index("publish_snapshot.py")]
+        # Comments stripped first: the step EXPLAINS why it is not
+        # continue-on-error, and a bare substring search reads the explanation
+        # as the setting. (Same shape as the matcher test below — twice now.)
+        keys = [
+            ln.split("#")[0].strip()
+            for ln in step.splitlines()
+            if ln.split("#")[0].strip()
+        ]
+        assert not any(k.startswith("continue-on-error") for k in keys), keys
+
+    def test_the_committed_fallback_still_exists_and_is_valid(self):
+        """It is what the page draws when the fetch fails. An absent or broken
+        fallback turns a degraded page into a blank one."""
+        assert PUBLIC_SNAPSHOT.exists(), (
+            f"{PUBLIC_SNAPSHOT.relative_to(ROOT)} is the page's fallback — "
+            "without it a failed fetch renders an empty map"
+        )
+        payload = json.loads(PUBLIC_SNAPSHOT.read_text())
+        for key in ("asof", "window_days", "n_tickers", "nodes", "edges", "corr_edges"):
+            assert key in payload, f"fallback snapshot is missing {key}"
+        assert payload["nodes"], "fallback snapshot has no nodes"
+
+    def test_the_sync_script_still_works_for_refreshing_the_fallback(self):
+        """Kept as a manual tool. The fallback is allowed to be old, but it
+        should be refreshable without hand-editing a 24 KB JSON."""
         r = subprocess.run(
             [sys.executable, str(SYNC), "--check"],
             capture_output=True, text=True, cwd=ROOT,
         )
-        assert r.returncode == 0, r.stdout + r.stderr
+        # Either outcome is fine — in sync, or reporting that it is not. What
+        # must not happen is the script erroring out.
+        assert r.returncode in (0, 1), r.stdout + r.stderr
+        assert "Traceback" not in r.stderr, r.stderr
 
-    def test_the_nightly_job_refreshes_and_commits_the_copy(self):
-        """Drift is prevented rather than detected: the same job that writes the
-        snapshot writes the copy, in the same commit."""
-        wf = WORKFLOW.read_text()
-        assert "sync_web_snapshot" in wf, (
-            "the daily harvest must re-sync the public copy or the map freezes "
-            "at whatever was last committed by hand"
+
+class TestThePageSaysWhichCopyItIsShowing:
+    """The page's whole claim is that its numbers can name their source. The one
+    number ABOUT the source cannot be the exception — a stale map presented as
+    live is the failure this plumbing was rebuilt to prevent."""
+
+    def _source(self) -> str:
+        return (ROOT / "web" / "lib" / "snapshot-source.ts").read_text()
+
+    def test_a_failed_fetch_falls_back_rather_than_throwing(self):
+        src = self._source()
+        assert "catch" in src and "fallbackSnapshot" in src, (
+            "the page must render from its committed copy when the fetch fails; "
+            "a 500 over a document we already have is worse than a stale draw"
         )
-        assert "web/lib/graph-snapshot.json" in wf, (
-            "the refreshed copy must be in the push step's `git add`"
+
+    def test_every_fallback_path_carries_a_reason(self):
+        """Four ways to end up on the fallback — unset, non-200, malformed,
+        unreachable. Each has to say which, or the page shows 'offline' with no
+        way to tell a misconfiguration from an outage."""
+        src = self._source()
+        fallbacks = src.count('origin: "fallback"')
+        reasons = src.count("reason:")
+        assert fallbacks >= 4, f"expected every failure mode branched, got {fallbacks}"
+        assert reasons >= fallbacks, "a fallback without a reason is a silent one"
+
+    def test_the_page_renders_the_origin(self):
+        page = PAGE.read_text()
+        assert "Provenance" in page and "即時讀取" in page and "離線備份" in page
+
+    def test_the_page_revalidates_rather_than_baking_at_build(self):
+        """Static export would make the page exactly as fresh as the last
+        deploy — which is the problem we just removed."""
+        page = PAGE.read_text()
+        assert "export const revalidate" in page, (
+            "without revalidation the fetched snapshot is frozen at build time"
         )
-        assert wf.index("sync_web_snapshot") < wf.index("Commit & push refreshed snapshot")
 
 
 class TestEveryClassificationHasAChineseLabel:

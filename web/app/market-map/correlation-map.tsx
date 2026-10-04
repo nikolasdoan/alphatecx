@@ -2,14 +2,15 @@
 
 import { useId, useMemo, useState } from "react";
 import {
-	byId,
 	colorOf,
+	indexById,
 	nodeLabel,
 	PILLARS,
 	type Pillar,
 	type Placed,
 	placeNodes,
-	snapshot,
+	type Snapshot,
+	type SnapshotNode,
 	UNCLASSIFIED_COLOR,
 	VIEWBOX,
 } from "@/lib/market-map";
@@ -40,8 +41,9 @@ function moveColor(ret: number): string {
 
 const pct = (v: number) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
 
-export default function CorrelationMap() {
-	const placed = useMemo(() => placeNodes(snapshot.nodes), []);
+export default function CorrelationMap({ snapshot }: { snapshot: Snapshot }) {
+	const placed = useMemo(() => placeNodes(snapshot.nodes), [snapshot]);
+	const byId = useMemo(() => indexById(snapshot), [snapshot]);
 	const index = useMemo(() => new Map(placed.map((p) => [p.id, p])), [placed]);
 
 	const [showChain, setShowChain] = useState(true);
@@ -67,7 +69,7 @@ export default function CorrelationMap() {
 			if (e.to === focus) set.add(e.from);
 		}
 		return set;
-	}, [focus]);
+	}, [focus, snapshot]);
 
 	const dim = (id: string) => (related && !related.has(id) ? 0.12 : 1);
 	const edgeDim = (a: string, b: string) =>
@@ -178,7 +180,7 @@ export default function CorrelationMap() {
 					))}
 				</svg>
 
-				{card && <Card node={card} />}
+				{card && <Card node={card} snapshot={snapshot} byId={byId} />}
 			</div>
 
 			<Legend mode={mode} />
@@ -261,7 +263,15 @@ function Dot({
 	);
 }
 
-function Card({ node }: { node: Placed }) {
+function Card({
+	node,
+	snapshot,
+	byId,
+}: {
+	node: Placed;
+	snapshot: Snapshot;
+	byId: Map<string, SnapshotNode>;
+}) {
 	const chain = snapshot.edges.filter(
 		(e) => e.from === node.id || e.to === node.id,
 	);

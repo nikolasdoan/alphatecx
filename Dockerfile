@@ -46,6 +46,11 @@ COPY src ./src
 COPY riskguard ./riskguard
 COPY sql ./sql
 COPY deploy ./deploy
+# scripts/publish_snapshot.py — this image regenerates the correlation
+# snapshot and PUTs it to R2. It could not do that while the snapshot was
+# delivered by committing to main, because this service has no write
+# access to the repository; object storage is what made it possible.
+COPY scripts ./scripts
 COPY apply_schema.py ./
 # Not a layering mistake: riskguard/{pipeline,store,replay}.py import the pure
 # decision functions from mcp_server/api/rg/, and rg/db.py falls back to

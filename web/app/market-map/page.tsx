@@ -1,14 +1,15 @@
 import Link from "next/link";
 import {
 	ageInDays,
-	byId,
 	crossChainAndCorrelation,
+	indexById,
 	nodeLabel,
 	PILLARS,
 	type Pillar,
 	RHO_FLOOR,
-	snapshot,
+	type SnapshotNode,
 } from "@/lib/market-map";
+import { loadSnapshot, type SnapshotOrigin } from "@/lib/snapshot-source";
 import ChainFlow from "./chain-flow";
 import CorrelationMap from "./correlation-map";
 import MarketClock from "./market-clock";
@@ -32,8 +33,18 @@ export const metadata = {
  * no request-time fetch, no token in the bundle, nothing to fall over.
  */
 
-export default function MarketMapPage() {
-	const { tight, chainPairs, tightPairs, overlap } = crossChainAndCorrelation();
+/**
+ * Revalidated, not static. The snapshot is fetched from object storage rather
+ * than imported, so the page is only as stale as this window — the committed
+ * copy is a labelled fallback now, not the source of truth.
+ */
+export const revalidate = 1800;
+
+export default async function MarketMapPage() {
+	const { snapshot, origin, reason } = await loadSnapshot();
+	const byId = indexById(snapshot);
+	const { tight, chainPairs, tightPairs, overlap } =
+		crossChainAndCorrelation(snapshot);
 	const age = ageInDays(snapshot.asof);
 
 	return (
@@ -80,6 +91,7 @@ export default function MarketMapPage() {
 						<span className={age > 10 ? "text-foreground" : undefined}>
 							{age === 0 ? "今日更新" : `${age} 天前`}
 						</span>
+						<Provenance origin={origin} reason={reason} />
 					</div>
 				</header>
 
@@ -88,7 +100,7 @@ export default function MarketMapPage() {
 					zh="供應鏈：從國外上游，到台灣，到終端客戶"
 					lead="一條產業鏈不是一張清單，而且它不從台灣開始、也不在台灣結束。左邊是台灣得先向誰買設備和材料，中間是我們持有資料的台股，右邊是誰在買。框內的橫向位置就是鏈上的深度：離台積電一步、還是四步。"
 				>
-					<ChainFlow />
+					<ChainFlow snapshot={snapshot} />
 				</Section>
 
 				<Section
@@ -96,7 +108,7 @@ export default function MarketMapPage() {
 					zh="相關性地圖：市場怎麼分群"
 					lead="位置不是產業別，是 120 日報酬相關性的二維投影 —— 兩個點靠在一起，是因為它們真的一起動。把供應鏈的線疊上去，看得到哪些關係反映在價格上，哪些沒有。"
 				>
-					<CorrelationMap />
+					<CorrelationMap snapshot={snapshot} />
 				</Section>
 
 				<Section
@@ -121,18 +133,18 @@ export default function MarketMapPage() {
 								key={`${e.from}-${e.to}`}
 								className="flex items-center gap-3 bg-background px-4 py-3 text-sm"
 							>
-								<Chip id={e.from} />
+								<Chip node={byId.get(e.from)} id={e.from} />
 								<span
 									aria-hidden="true"
 									className="h-0.5 flex-1 rounded-full bg-[#8c52ff]"
 									style={{ opacity: 0.25 + (e.rho - RHO_FLOOR) * 3 }}
 								/>
-								<Chip id={e.to} />
+								<Chip node={byId.get(e.to)} id={e.to} />
 								<span className="w-11 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
 									{e.rho.toFixed(2)}
 								</span>
 								<span className="w-28 shrink-0 text-right text-xs text-muted-foreground">
-									{e.linked ? "鏈上有關係" : sharedGround(e.from, e.to)}
+									{e.linked ? "鏈上有關係" : sharedGround(byId, e.from, e.to)}
 								</span>
 							</li>
 						))}
@@ -212,6 +224,31 @@ export default function MarketMapPage() {
 	);
 }
 
+/**
+ * Says which copy the reader is looking at.
+ *
+ * The page's whole claim is that its numbers can name their source, so the one
+ * number that is ABOUT the source cannot be the exception. Live is stated
+ * quietly; the fallback is stated loudly, with the reason, because a stale map
+ * presented as current is the exact failure this plumbing was rebuilt to stop.
+ */
+function Provenance({
+	origin,
+	reason,
+}: {
+	origin: SnapshotOrigin;
+	reason?: string;
+}) {
+	if (origin === "live") {
+		return <span className="text-muted-foreground">即時讀取</span>;
+	}
+	return (
+		<span className="text-foreground">
+			離線備份{reason ? `（${reason}）` : ""}
+		</span>
+	);
+}
+
 function Section({
 	n,
 	zh,
@@ -265,7 +302,11 @@ function Stat({
  * always the same sub-industry — which is the point the paragraph below the
  * list is making, and it is better made by the rows themselves than asserted.
  */
-function sharedGround(a: string, b: string): string {
+function sharedGround(
+	byId: Map<string, SnapshotNode>,
+	a: string,
+	b: string,
+): string {
 	const x = byId.get(a);
 	const y = byId.get(b);
 	if (!x || !y) return "";
@@ -280,8 +321,8 @@ function sharedGround(a: string, b: string): string {
 	return "跨產業";
 }
 
-function Chip({ id }: { id: string }) {
-	const n = byId.get(id);
+function Chip({ node, id }: { node?: SnapshotNode; id: string }) {
+	const n = node;
 	return (
 		<span className="shrink-0 rounded border border-border px-2 py-0.5 text-xs">
 			{n?.name ?? id}

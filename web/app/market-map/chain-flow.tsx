@@ -11,7 +11,7 @@ import {
 	nodeLabel,
 	PILLARS,
 	type Pillar,
-	snapshot,
+	type Snapshot,
 	type Tiered,
 	UPSTREAM_GROUPS,
 } from "@/lib/market-map";
@@ -61,13 +61,13 @@ function edgePath(a: Tiered, b: Tiered): string {
 	return `M ${x1} ${a.cy} C ${mid} ${a.cy}, ${mid} ${b.cy}, ${x2} ${b.cy}`;
 }
 
-export default function ChainFlow() {
+export default function ChainFlow({ snapshot }: { snapshot: Snapshot }) {
 	const { tiered, maxTier, unmapped, width, height } = useMemo(
-		() => buildChain(),
-		[],
+		() => buildChain(snapshot),
+		[snapshot],
 	);
 	const index = useMemo(() => new Map(tiered.map((n) => [n.id, n])), [tiered]);
-	const customers = useMemo(() => buildCustomers(), []);
+	const customers = useMemo(() => buildCustomers(snapshot), [snapshot]);
 	const [active, setActive] = useState<string | null>(null);
 	const [pinned, setPinned] = useState<string | null>(null);
 	const [activeCustomer, setActiveCustomer] = useState<string | null>(null);
@@ -129,7 +129,7 @@ export default function ChainFlow() {
 			}
 		}
 		return set;
-	}, [focus]);
+	}, [focus, snapshot]);
 
 	// Hovering a customer lights its Taiwan suppliers, which is the same
 	// question asked from the other end: "who in 台股 sells to NVIDIA?"
@@ -164,7 +164,7 @@ export default function ChainFlow() {
 			)
 			.filter((p) => names.has(p))
 			.map((customer) => ({ id: focus, customer }));
-	}, [activeCustomer, focus, customers]);
+	}, [activeCustomer, focus, customers, snapshot]);
 
 	const card = focus ? index.get(focus) : null;
 	const customerCard = activeCustomer

@@ -56,7 +56,17 @@ export interface Snapshot {
 	corr_edges: CorrEdge[];
 }
 
-export const snapshot = raw as unknown as Snapshot;
+/**
+ * The committed copy — now a FALLBACK, not the source of truth.
+ *
+ * The live snapshot is fetched from object storage at request time (see
+ * lib/snapshot-source.ts). This copy exists so the page always renders: if R2
+ * is unreachable, misconfigured or empty, the map still draws and the page
+ * says which one it is showing. It is refreshed by hand with
+ * `scripts/sync_web_snapshot.py`, NOT nightly — so expect it to be old, and
+ * never present it as current.
+ */
+export const fallbackSnapshot = raw as unknown as Snapshot;
 
 /* ── Labels ───────────────────────────────────────────────────────────────
    Chinese first: the audience reads 台股 in Chinese, and the company names in
@@ -119,7 +129,9 @@ export function nodeLabel(n: SnapshotNode) {
 	return n.node ? (NODE_LABELS[n.node] ?? n.node) : "未分類";
 }
 
-export const byId = new Map(snapshot.nodes.map((n) => [n.id, n]));
+export function indexById(snapshot: Snapshot) {
+	return new Map(snapshot.nodes.map((n) => [n.id, n]));
+}
 
 /* ── The correlation map ──────────────────────────────────────────────────
    `x`/`y` are an MDS embedding of the 120-day return-correlation matrix: two
@@ -400,7 +412,10 @@ export interface Customer {
  * the fact the graph exists to show — that a dozen American buyers sit at the
  * end of nearly every chain in the box.
  */
-export function buildCustomers(minSuppliers = 2): Customer[] {
+export function buildCustomers(
+	snapshot: Snapshot,
+	minSuppliers = 2,
+): Customer[] {
 	const byName = new Map<string, string[]>();
 	for (const n of snapshot.nodes) {
 		for (const raw of n.partners) {
@@ -454,7 +469,7 @@ export const CHAIN = {
 const CHAIN_W = CHAIN.twW;
 const CHAIN_H = CHAIN.height - CHAIN.top - 60;
 
-export function buildChain() {
+export function buildChain(snapshot: Snapshot) {
 	const tier = longestUpstream(snapshot.edges);
 
 	// Peers attach to whatever they partner with, so they sit beside it rather
@@ -519,7 +534,7 @@ export function buildChain() {
 
 export const RHO_FLOOR = 0.7;
 
-export function crossChainAndCorrelation() {
+export function crossChainAndCorrelation(snapshot: Snapshot) {
 	const key = (a: string, b: string) => [a, b].sort().join("~");
 	const corr = new Map(
 		snapshot.corr_edges.map((e) => [key(e.from, e.to), e.rho]),
